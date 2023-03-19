@@ -3,9 +3,10 @@ from pysat.formula import CNF
 from pysat.solvers import Solver
 from itertools import product
 import random
-
+### TEST CASE ###
 # Create an empty CNF formula
 cnf = CNF()
+### Change the seed for another cnf formula
 random.seed(4)
 
 # Add 10 random clauses with up to 5 literals each
@@ -13,7 +14,7 @@ random.seed(4)
     literals = [v for v in range(1, 6)]  # Variables are named 1, 2, ..., 5
     clause = [random.sample(literals) * (-1 if random.random() > 0.5 else 1) for _ in range(random.randint(1, 5))]  # Randomly select literals to include
     cnf.append(clause)'''
-
+#Adjust the number of variable and number of clauses for the test case
 num_vars = 5
 num_clauses = 6
 for i in range(num_clauses):
@@ -29,6 +30,7 @@ print(cnf.clauses)
 # open("random.cnf", "w") as f:
 #    f.write(cnf.to_file("random.cnf"))
 
+# implementing pysat's sat solver
 solver = Solver()
 solver.append_formula(cnf)
 if solver.solve():
@@ -161,6 +163,11 @@ def implied_clause(clause, decision):
 #print(implied_clause([1,2,5], {1:True, 2:True}))
 
 def check_conflict(clauses, decisions):
+    '''
+    :param clauses: clauses in the cnf (with sat clauses removed)
+    :param decisions: dict of all decisions
+    :return: boolean if there is a conflict in any clauses
+    '''
     conflict = False
     implied_dict = {}
     for each_clause in clauses:
@@ -215,6 +222,7 @@ def make_free_decisions(decisions, start_lit, max_lit_num ):
 
 def dpll(cnf):
     sat = False
+    # Get all clauses and the # of literals in the original cnf
     all_clauses = cnf.clauses
     max_lit_num = cnf.nv
     # Make assignment to clauses containing 1 literal in the original cnf
@@ -233,10 +241,11 @@ def dpll(cnf):
 
     keys = sorted(list(free_decision.keys()))
 
+    #creating an assignment pattern of FFF, FFT, FTF, FTT,... (given the len is 3)
     for pattern in product([False, True], repeat=len(free_decision)):
         free_decision = dict(zip(keys, pattern))
-        if (check_conflict(all_clauses, all_decisions)):
-            continue
+        #if (check_conflict(all_clauses, all_decisions)):
+            #continue
         all_clauses = remove_sat_clauses(all_clauses, free_decision)
         all_decisions.update(free_decision)
 
