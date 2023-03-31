@@ -46,51 +46,34 @@ else:
 #print(cnf.nv)
 
 print("====NOT TEST CASES====")
-"""
-###############################
-##### CODE FOR SAT SOLVER #####
-###############################
-"""
 
-'''def evaluate_clause(clause, model):
-    """
-    Evaluate a clause in a given model.
-    """
-    for literal in clause:
-        # Evaluate the literal in the model
-        symbol = abs(literal)
-        value = model.get(symbol)
-        if value is None:
-            # If the symbol is not in the model, the literal is undefined
-            return None
-        elif literal > 0 and value or literal < 0 and not value:
-            # If the literal is positive and its value is True, or
-            # if the literal is negative and its value is False, the clause is true
-            return True
-    # If none of the literals are true, the clause is false
-
-    return False
-print(evaluate_clause([4, 4, -5], {1:False, 2:False, 3:True, 4:False, 5:False}))'''
-
-
-'''def evaluate_cnf(cnf, model):
-    for clause in cnf:
-        if (not evaluate_clause(clause, model)):
-            return False
-    return True
-
-#print(evaluate_cnf(cnf.clauses, {1:False, 2:False, 3:True, 4:False, 5:False}))
-
-def search_tree(cnf):
-    var = cnf.nv
-    model = {1:False, 2:False, 3:False, 4:False, 5:False}
-
-    if (not evaluate_cnf(cnf, model)):
-        model[2] = True
-        print(model)
-    return None
-#print(type({1:False, 2:True}))
-search_tree(cnf)'''
+class Node:
+    def __init__(self,clauses,parent,decisions,variable):
+        self.right = None
+        self.left = None
+        self.parent = parent
+        self.clauses = clauses
+        self.decisions = decisions
+        self.var = variable
+    
+    def createNode(self,decision,variable):
+        new_decisions = self.decisions.copy()
+        new_decisions.update({self.var:decision})
+        if decision:
+            self.right = Node(self.clauses,self,new_decisions,variable)
+        else:
+            self.left = Node(self.clauses,self,new_decisions,variable)
+    
+    def removeNode(Node):
+        del Node
+    
+    def printTree(root):
+        if root.left != None:
+            Node.printTree(root.left)
+        print(root.var)
+        if root.right != None:
+            Node.printTree(root.right)
+    
 
 
 def single_decision(clauses, decision):
@@ -147,7 +130,7 @@ def implied_clause(clause, decision):
     :return: return len 1 dictionary of the implied unit clause
     '''
     implied = {}
-    unassigned_lit = len(clause)
+    unassigned_lit = len(clause) 
     for literal in clause:
         symbol = abs(literal)
         value = decision.get(symbol)
@@ -190,35 +173,8 @@ def check_conflict(clauses, decisions):
     return conflict
 #print("test conflict")
 #print(check_conflict([[2, 4, 5], [1, 2]], {1:True, 4:True, 5:True}))
-'''def make_free_decisions(start_lit, decisions, forced_decisions, max_lit_num):
-    while (start_lit <= max_lit_num):
-        if (start_lit in forced_decisions and start_lit not in decisions):
-            #if (start_lit not in decisions):
-                #make_free_decisions(start_lit+1, decisions, forced_decisions, max_lit_num)
-            #else:
-                #make_free_decisions(start_lit-1, decisions, forced_decisions, max_lit_num)
-            start_lit += 1
 
-        elif (start_lit in decisions and decisions[start_lit] == False):
-            decisions.update({start_lit:True})
-            #return make_free_decisions(start_lit - 1, decisions, forced_decisions, max_lit_num)
-        elif (start_lit in decisions and decisions[start_lit] == True):
-            if ((start_lit - 1) in forced_decisions):
-                start_lit -= 1
-            return make_free_decisions(start_lit-1, decisions, forced_decisions, max_lit_num)
-        else: # Fill in free decisions other than forced ones
-            decisions.update({start_lit: False})
-            return make_free_decisions(start_lit + 1, decisions, forced_decisions, max_lit_num)
-    return decisions
-def make_free_decisions(decisions, start_lit, max_lit_num ):
-    done = False
-    if (start_lit < 1):
-        done = True
-        return decisions, done
-    if (decisions[start_lit] == False):
-        decisions.update({start_lit : True})
-
-    return decisions, done'''
+#TOdO Add logic to declare unsat if conflicting unit clauses exist
 
 def dpll(cnf):
     sat = False
