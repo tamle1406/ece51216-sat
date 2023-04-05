@@ -8,7 +8,7 @@ import random
 cnf = CNF()
 ### Change the seed for another cnf formula
 ##Unsatisfiable test case : seed 25, nv 40, clauses 70
-random.seed(23)
+random.seed(25)
 
 # Add 10 random clauses with up to 5 literals each
 '''for i in range(10):
@@ -16,8 +16,8 @@ random.seed(23)
     clause = [random.sample(literals) * (-1 if random.random() > 0.5 else 1) for _ in range(random.randint(1, 5))]  # Randomly select literals to include
     cnf.append(clause)'''
 #Adjust the number of variable and number of clauses for the test case
-num_vars = 6
-num_clauses = 7
+num_vars = 800
+num_clauses = 1000
 for i in range(num_clauses):
     clause = []
     while len(clause) == 0 or len(set(map(abs, clause))) < len(clause) or 0 in clause:
@@ -98,6 +98,8 @@ def single_decision(clauses, decision):
                 # if the literal is negative and its value is False, the clause is true
                 sat_clauses.append(each_clause)
                 break
+            elif value is not None and (literal < 0 and value or literal > 0 and not value):
+                each_clause.remove(literal)
     #for clauses in sat_clauses:
         #clauses_copy.remove(clauses)
     return sat_clauses
@@ -112,17 +114,32 @@ def remove_sat_clauses(clauses, decisions):
 
 #print(remove_sat_clauses([[-3, 5], [-4], [-2, 4, 5]], {4:True, 3:False}))
 
-# def count_literals(clauses):
-#     count=[]
-#     for i in range(0,num_vars):
-#         count.append(0)
-#     for each_clause in clauses:
-#         for literal in each_clause:
-#             if literal>0:
-#                 count[literal-1]+=1
-#             else:
-#                 count[abs(literal)+num_vars-1]+=1
-#     return count
+def count_literals(clauses,free_vars):
+    count=[]
+    abs_count=[]
+    for i in range(0,num_vars):
+        count.append(0)
+    for each_clause in clauses:
+        for literal in each_clause:
+            if literal>0:
+                count[abs(literal)-1]+=1
+            else:
+                count[abs(literal)-1]-=1
+    for i in range(0,len(count)):
+        if i+1 in free_vars:
+            abs_count.append(abs(count[i]))
+        else:
+            abs_count.append(-1)
+    max_ = 0
+    max_index = 0
+    for i in range(0,len(abs_count)):
+        if abs_count[i] > max_:
+            max_ = abs_count[i]
+            max_index = i
+    if int(max_/count[max_index])>0: 
+        return True,max_index+1
+    else: 
+        return False,max_index+1
 
 def get_next_literal(counts):
     m=max(counts)
@@ -217,7 +234,19 @@ def check_sat(clauses):
         print("Satisfiable")
     return
 
+def get_all_literals(clauses):
+    literals=[]
+    for each_clause in clauses:
+        for each_literal in each_clause:
+            if abs(each_literal) not in literals: 
+                literals.append(abs(each_literal))
+    return literals
 
+def check_unsat(clauses):
+    for each_clause in clauses:
+        if each_clause == []:
+            return 1
+    return 0
 
 def dpll(cnf):
     sat = False
@@ -229,129 +258,281 @@ def dpll(cnf):
     if forced_decision == -1:
         print ("Not Satisfiable")
         return
-    # Creating dict containing no forced decisions
-    free_var = []
-    for i in range(1, max_lit_num+1):
-        if i not in forced_decision:
-            free_var.append(i)
+    # Creating dict containing no forced decision
+    
+    # for i in range(1, max_lit_num+1):
+    #     if i not in forced_decision:
+    #         free_var.append(i)
     # Creating a dict containing all decisions
-    all_decisions = {}
-    all_decisions.update(forced_decision)
+    # all_decisions = {}
+    # all_decisions.update(forced_decision)
     # Remove all clauses that are satisfied  by this assignment
     all_clauses = remove_sat_clauses(all_clauses, forced_decision)
+    if check_unsat(all_clauses):
+        print("Not Satisfiable")
+        return
+    free_var = get_all_literals(all_clauses)
 
     # count = count_literals(all_clauses)
     # var = get_next_literal(count)
     # var_list = []
-
-    root = Node(all_clauses,None,forced_decision,free_var[0])
+    var_index = 0
+    next_decision,var = count_literals(all_clauses,free_var)
+    free_var.remove(var)
+    root = Node(all_clauses,None,forced_decision,var)
     # decision = True if var>0 else False
     # var_list.append(abs(var))
     curr_node = root
-    var_index = 0
     # while abs(var) in var_list:
     #     var = get_next_literal(count) # find better way to do var list
     #Add variable selection and decision selection heuristic here
     while True:
-        if curr_node.left==None:
-            var_index+=1
-            if var_index < len(free_var):
-                var = free_var[var_index]
-                decision = False
-                curr_node = Node.createNode(curr_node,decision,var)
-                for clause in curr_node.clauses:
-                    curr_node.decisions.update(implied_clause(clause,curr_node.decisions))
-                remove_sat_clauses(curr_node.clauses, curr_node.decisions)
-                if len(curr_node.clauses) == 0:
-                    print("Satisfiable")
-                    print(curr_node.decisions)
-                    # Node.printTree(root)
-                    return
+        if (curr_node.left!=None)and(curr_node.right!=None):
+            if curr_node == root:
+                print("Not Satisfiable")
+                return
+            #var_index-=1
+            if curr_node.decisions.get(curr_node.parent.var):
+                next_decision = False
             else:
-                clauses_copy = curr_node.clauses
-                curr_node.decisions.update({curr_node.var:False})
-                remove_sat_clauses(clauses_copy,curr_node.decisions)
-                if len(clauses_copy) == 0:
-                    print("Satisfiable")
-                    print(curr_node.decisions)
-                    # Node.printTree(root)
-                    return
-                curr_node.decisions.update({curr_node.var:True})
-                remove_sat_clauses(curr_node.clauses,curr_node.decisions)
-                if len(curr_node.clauses) == 0:
-                    print("Satisfiable")
-                    print(curr_node.decisions)
-                    # Node.printTree(root)
-                    return
-                if (curr_node==root):
-                    print("Not Satisfiable")
-                    return
-                curr_node = curr_node.parent
-                var_index-=1
-                continue
-        if curr_node.right==None:
-            var_index+=1
-            if var_index < len(free_var):
-                var = free_var[var_index]
-                decision = True
-                curr_node = Node.createNode(curr_node,decision,var)
-                for clause in curr_node.clauses:
-                    curr_node.decisions.update(implied_clause(clause,curr_node.decisions))
-                remove_sat_clauses(curr_node.clauses, curr_node.decisions)
-                if len(curr_node.clauses) == 0:
-                    print("Satisfiable")
-                    print(curr_node.decisions)
-                    # Node.printTree(root)
-                    return
-            else:
-                clauses_copy = curr_node.clauses
-                curr_node.decisions.update({curr_node.var:False})
-                remove_sat_clauses(clauses_copy,curr_node.decisions)
-                if len(clauses_copy) == 0:
-                    print("Satisfiable")
-                    print(curr_node.decisions)
-                    # Node.printTree(root)
-                    return
-                curr_node.decisions.update({curr_node.var:True})
-                remove_sat_clauses(curr_node.clauses,curr_node.decisions)
-                if len(curr_node.clauses) == 0:
-                    print("Satisfiable")
-                    print(curr_node.decisions)
-                    # Node.printTree(root)
-                    return
-                if (curr_node==root):
-                    print("Not Satisfiable")
-                    return
-                var_index-=1
-                curr_node = curr_node.parent
-                continue
-        if curr_node == root:
-            print("Not Satisfiable")
-            return
-        var_index-=1
-        curr_node=curr_node.parent
+                next_decision = True
+            free_var.append(curr_node.var)
+            curr_node=curr_node.parent
+        if not next_decision:
+            if curr_node.left==None:
+                #var_index+=1
+                if len(free_var)>0:
+                    #var = free_var[var_index]
+                    next_decision,var=count_literals(curr_node.clauses,free_var)
+                    decision = False
+                    curr_node = Node.createNode(curr_node,decision,var)
+                    free_var.remove(var)
+                    for clause in curr_node.clauses:
+                        curr_node.decisions.update(implied_clause(clause,curr_node.decisions))
+                    remove_sat_clauses(curr_node.clauses, curr_node.decisions)
+                    if (check_unsat(curr_node.clauses)): #Checks for conflict 
+                        if curr_node.decisions.get(curr_node.parent.var):
+                            next_decision = False
+                        else:
+                            next_decision = True
+                        free_var.append(curr_node.var)
+                        curr_node=curr_node.parent
+                        #var_index-=1
+                        continue
+                    curr_node.decisions.update(unit_clause(curr_node.clauses))
+                    if len(curr_node.clauses) == 0:
+                        print("Satisfiable")
+                        print(curr_node.decisions)
+                        # Node.printTree(root)
+                        return
+                    continue
+                else:
+                    clauses_copy = curr_node.clauses
+                    curr_node.decisions.update({curr_node.var:False})
+                    remove_sat_clauses(clauses_copy,curr_node.decisions)
+                    if len(clauses_copy) == 0:
+                        print("Satisfiable")
+                        print(curr_node.decisions)
+                        # Node.printTree(root)
+                        return
+                    curr_node.decisions.update({curr_node.var:True})
+                    remove_sat_clauses(curr_node.clauses,curr_node.decisions)
+                    if len(curr_node.clauses) == 0:
+                        print("Satisfiable")
+                        print(curr_node.decisions)
+                        # Node.printTree(root)
+                        return
+                    if (curr_node==root):
+                        print("Not Satisfiable")
+                        return
+                    if curr_node.decisions.get(curr_node.parent.var):
+                        next_decision = False
+                    else:
+                        next_decision = True
+                    free_var.append(curr_node.var)
+                    curr_node=curr_node.parent
+                    #var_index-=1
+                    continue
+            if curr_node.right==None:
+                #var_index+=1
+                if len(free_var)>0:
+                    #var = free_var[var_index]
+                    decision = True
+                    next_decision,var=count_literals(curr_node.clauses,free_var)
+                    curr_node = Node.createNode(curr_node,decision,var)
+                    free_var.remove(var)
+                    for clause in curr_node.clauses:
+                        curr_node.decisions.update(implied_clause(clause,curr_node.decisions))
+                    remove_sat_clauses(curr_node.clauses, curr_node.decisions)
+                    if (check_unsat(curr_node.clauses)): #Checks for conflict 
+                        if curr_node.decisions.get(curr_node.parent.var):
+                            next_decision = False
+                        else:
+                            next_decision = True
+                        free_var.append(curr_node.var)
+                        curr_node=curr_node.parent
+                        #var_index-=1
+                        continue
+                    curr_node.decisions.update(unit_clause(curr_node.clauses))
+                    if len(curr_node.clauses) == 0:
+                        print("Satisfiable")
+                        print(curr_node.decisions)
+                        # Node.printTree(root)
+                        return
+                    continue
+                else:
+                    clauses_copy = curr_node.clauses
+                    curr_node.decisions.update({curr_node.var:False})
+                    remove_sat_clauses(clauses_copy,curr_node.decisions)
+                    if len(clauses_copy) == 0:
+                        print("Satisfiable")
+                        print(curr_node.decisions)
+                        # Node.printTree(root)
+                        return
+                    curr_node.decisions.update({curr_node.var:True})
+                    remove_sat_clauses(curr_node.clauses,curr_node.decisions)
+                    if len(curr_node.clauses) == 0:
+                        print("Satisfiable")
+                        print(curr_node.decisions)
+                        # Node.printTree(root)
+                        return
+                    if (curr_node==root):
+                        print("Not Satisfiable")
+                        return
+                    #var_index-=1
+                    if curr_node.decisions.get(curr_node.parent.var):
+                        next_decision = False
+                    else:
+                        next_decision = True
+                    free_var.append(curr_node.var)
+                    curr_node=curr_node.parent
+                    continue
+        else:
+            if curr_node.right==None:
+                #var_index+=1
+                if len(free_var)>0:
+                    #var = free_var[var_index]
+                    decision = True
+                    next_decision,var=count_literals(curr_node.clauses,free_var)
+                    curr_node = Node.createNode(curr_node,decision,var)
+                    free_var.remove(var)
+                    for clause in curr_node.clauses:
+                        curr_node.decisions.update(implied_clause(clause,curr_node.decisions))
+                    remove_sat_clauses(curr_node.clauses, curr_node.decisions)
+                    if (check_unsat(curr_node.clauses)): #Checks for conflict 
+                        if curr_node.decisions.get(curr_node.parent.var):
+                            next_decision = False
+                        else:
+                            next_decision = True
+                        free_var.append(curr_node.var)
+                        curr_node=curr_node.parent
+                        #var_index-=1
+                        continue
+                    curr_node.decisions.update(unit_clause(curr_node.clauses))
+                    if len(curr_node.clauses) == 0:
+                        print("Satisfiable")
+                        print(curr_node.decisions)
+                        # Node.printTree(root)
+                        return
+                    continue
+                else:
+                    clauses_copy = curr_node.clauses
+                    curr_node.decisions.update({curr_node.var:False})
+                    remove_sat_clauses(clauses_copy,curr_node.decisions)
+                    if len(clauses_copy) == 0:
+                        print("Satisfiable")
+                        print(curr_node.decisions)
+                        # Node.printTree(root)
+                        return
+                    curr_node.decisions.update({curr_node.var:True})
+                    remove_sat_clauses(curr_node.clauses,curr_node.decisions)
+                    if len(curr_node.clauses) == 0:
+                        print("Satisfiable")
+                        print(curr_node.decisions)
+                        # Node.printTree(root)
+                        return
+                    if (curr_node==root):
+                        print("Not Satisfiable")
+                        return
+                    #var_index-=1
+                    if curr_node.decisions.get(curr_node.parent.var):
+                        next_decision = False
+                    else:
+                        next_decision = True
+                    free_var.append(curr_node.var)
+                    curr_node=curr_node.parent
+                    continue
+            if curr_node.left==None:
+                #var_index+=1
+                if len(free_var)>0:
+                    #var = free_var[var_index]
+                    next_decision,var=count_literals(curr_node.clauses,free_var)
+                    decision = False
+                    curr_node = Node.createNode(curr_node,decision,var)
+                    free_var.remove(var)
+                    for clause in curr_node.clauses:
+                        curr_node.decisions.update(implied_clause(clause,curr_node.decisions))
+                    remove_sat_clauses(curr_node.clauses, curr_node.decisions)
+                    if (check_unsat(curr_node.clauses)): #Checks for conflict 
+                        if curr_node.decisions.get(curr_node.parent.var):
+                            next_decision = False
+                        else:
+                            next_decision = True
+                        free_var.append(curr_node.var)
+                        curr_node=curr_node.parent
+                        #var_index-=1
+                        continue
+                    curr_node.decisions.update(unit_clause(curr_node.clauses))
+                    if len(curr_node.clauses) == 0:
+                        print("Satisfiable")
+                        print(curr_node.decisions)
+                        # Node.printTree(root)
+                        return
+                    continue
+                else:
+                    clauses_copy = curr_node.clauses
+                    curr_node.decisions.update({curr_node.var:False})
+                    remove_sat_clauses(clauses_copy,curr_node.decisions)
+                    if len(clauses_copy) == 0:
+                        print("Satisfiable")
+                        print(curr_node.decisions)
+                        # Node.printTree(root)
+                        return
+                    curr_node.decisions.update({curr_node.var:True})
+                    remove_sat_clauses(curr_node.clauses,curr_node.decisions)
+                    if len(curr_node.clauses) == 0:
+                        print("Satisfiable")
+                        print(curr_node.decisions)
+                        # Node.printTree(root)
+                        return
+                    if (curr_node==root):
+                        print("Not Satisfiable")
+                        return
+                    if curr_node.decisions.get(curr_node.parent.var):
+                        next_decision = False
+                    else:
+                        next_decision = True
+                    free_var.append(curr_node.var)
+                    curr_node=curr_node.parent
+                    #var_index-=1
+                    continue
 
             
-            
+
+    # #creating an assignment pattern of FFF, FFT, FTF, FTT,... (given the len is 3)
+    # # for pattern in product([False, True], repeat=len(free_decision)):
+    # #     free_decision = dict(zip(keys, pattern))
+    # #     #if (check_conflict(all_clauses, all_decisions)):
+    # #         #continue
+    # #     all_clauses = remove_sat_clauses(all_clauses, free_decision)
+    # #     all_decisions.update(free_decision)
 
 
-        
-
-
-    #creating an assignment pattern of FFF, FFT, FTF, FTT,... (given the len is 3)
-    # for pattern in product([False, True], repeat=len(free_decision)):
-    #     free_decision = dict(zip(keys, pattern))
-    #     #if (check_conflict(all_clauses, all_decisions)):
-    #         #continue
-    #     all_clauses = remove_sat_clauses(all_clauses, free_decision)
-    #     all_decisions.update(free_decision)
-
-
-    #     if len(all_clauses) == 0:
-    #         print("Satisfiable")
-    #         print(all_decisions)
-    #         break
-    if (len(all_clauses) != 0):
-        print("not satisfiable")
-    return
+    # #     if len(all_clauses) == 0:
+    # #         print("Satisfiable")
+    # #         print(all_decisions)
+    # #         break
+    # if (len(all_clauses) != 0):
+    #     print("not satisfiable")
+    # return
 dpll(cnf)
