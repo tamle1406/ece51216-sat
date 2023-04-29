@@ -1,26 +1,32 @@
 
 from pysat.formula import CNF
 from pysat.solvers import Solver
+from pysat.examples.genhard import PHP
+from pysat.examples.genhard import CB
+from pysat.examples.genhard import GT
+from pysat.examples.genhard import PAR
 from itertools import product
 import random
 import time
+import cProfile
 
 ##Config variables
-PRINT_SOLN = False
-PRINT_DEBUG = False
-INPUT_TYPE = "file" ##Either file or Random - Need to set VALIDATOR_MODE to 0
-INPUT_FILE = "random.cnf" ##if Input is from a file
+PRINT_SOLN = True
+PRINT_DEBUG = True
+INPUT_TYPE = "PHP" ##Either file or Random - Need to set VALIDATOR_MODE to 0
+INPUT_FILE = "pigeon9.cnf" ##if Input is from a file
+TESTCASE = 6
 
 ##Random testcase
-NUM_VARS = 5
-NUM_CLAUSES = 5
-RAND_SEED = 93
+NUM_VARS = 6
+NUM_CLAUSES = 6
+RAND_SEED = 216
 
 ##Validator inputs
-VALIDATOR_SEED = 27
-VALIDATOR_MAX_CLAUSES = 300
+VALIDATOR_SEED = 24
+VALIDATOR_MAX_CLAUSES = 400
 VALIDATOR_MAX_VARS = 400
-VALIDATOR_MODE = 1
+VALIDATOR_MODE = 0
 TIMED_MODE = 1
 
 ### TEST CASE ###
@@ -46,7 +52,7 @@ def init_clauses(rand_seed,num_clauses,num_vars):
             clause = [random.choice([-1, 1]) * random.randint(1, num_vars) for j in range(random.randint(1, num_vars))]
             clause.sort(key=abs)
         cnf.append(clause)
-    if (PRINT_SOLN): print(cnf.clauses)
+    #if (PRINT_SOLN): print(cnf.clauses)
     return cnf
 # for i in [[1, 4], [-1, -4], [-4], [4], [-1, -2, 3, -4], [-2, 3, -4]]:
 #     cnf.append(i)
@@ -95,9 +101,10 @@ class Node:
         self.right = None
         self.left = None
         self.parent = parent
-        self.clauses = clauses
+        self.clauses = clauses.copy()
         self.decisions = decisions
         self.var = variable
+        self.free_var = []
     
     def createNode(self,decision,variable):
         new_decisions = self.decisions.copy()
@@ -109,8 +116,28 @@ class Node:
             self.left = Node(self.clauses,self,new_decisions,variable)
             return self.left
     
-    def removeNode(Node):
-        del Node
+    def createDummyNode(self,decision):
+        if decision:
+            self.right = Node([],self,None,None)
+            return self.right
+        else:
+            self.left = Node([],self,None,None)
+            return self.left
+    
+    def updateDummyNode(self):
+        self.decisions={}
+        self.clauses=[]
+        return
+    
+    def removeNode(self):
+        right=0
+        if self==self.parent.right:
+            right=1
+        if right:
+            Node.updateDummyNode(self)
+        else:
+            Node.updateDummyNode(self)
+        return self.parent
     
     def printTree(root):
         if root.left != None:
@@ -154,7 +181,20 @@ def remove_sat_clauses(clauses, decisions):
 
 #print(remove_sat_clauses([[-3, 5], [-4], [-2, 4, 5]], {4:True, 3:False}))
 
-def count_literals(clauses,free_vars,num_vars):
+
+def get_all_literals(clauses, decisions):
+    literals=[]
+    for each_clause in clauses:
+        for each_literal in each_clause:
+            if (not abs(each_literal) in literals) and (not abs(each_literal) in decisions): 
+                literals.append(abs(each_literal))
+    return literals
+
+def count_literals(clauses,decisions,num_vars,var):
+    #if var==78:
+        #print("Here")
+    free_vars=get_all_literals(clauses, decisions)
+    if var!=None and var in free_vars: free_vars.remove(var)
     count=[]
     abs_count=[]
     for i in range(0,num_vars):
@@ -214,12 +254,13 @@ def unit_clause(clauses, decision_graph):
                 if symbol in implied and implied.get(symbol) == True: return -1
                 implied.update({symbol: False})
                 decision_graph.update({symbol:[]})
+    if (PRINT_DEBUG): print(decision_graph)
     return implied
 # print("test unit_clause:")
 # print(unit_clause([[1,2,5],[4],[-4]]))
 
 
-def implied_clause(clause, decision):
+def implied_clause(clause, decision, implied_decisions):
     '''
     :param clause:
     :param decision: all the decisions made
@@ -240,6 +281,7 @@ def implied_clause(clause, decision):
     for literal in clause:
         symbol = abs(literal)
         value = decision.get(symbol)
+        # if value==None: value=implied_decisions.get(symbol)
         if (value is not None):
             if literal > 0 and value or literal < 0 and not value:
                 return [],{}
@@ -255,16 +297,16 @@ def implied_clause(clause, decision):
         #         implied.update({symbol: False})
     if unassigned_lit==1:
         if undecided_lit > 0:
-            # if (undecided_lit in all_decisions) and all_decisions.get(undecided_lit) == False:
-            #     return [],{-1:True}
+            if (undecided_lit in implied_decisions) and implied_decisions.get(undecided_lit) == False:
+                return [undecided_lit],{-1:True}
             implied.update({abs(undecided_lit):True})
         else:
-            # if (undecided_lit in all_decisions) and all_decisions.get(undecided_lit) == True:
-                # return [],{-1:True}
+            if (undecided_lit in implied_decisions) and implied_decisions.get(undecided_lit) == True:
+                return [undecided_lit],{-1:True}
             implied.update({abs(undecided_lit):False})
     if unassigned_lit == 0:
-        print("Detected Conflict!")
-        return [],{-1:True}
+        # print("Detected Conflict!")
+        return [],{-2:True}
     if len(implied) == 1:
         return unresolved_lits,implied
     return [],{}
@@ -288,12 +330,11 @@ def check_conflict(clauses, decisions):
         if (implied_key in implied_dict):
             value_in_dict = implied_dict[implied_key]
             if value_in_dict != implied[implied_key]:
-
                 conflict = True
                 break
             else:
                 continue
-        if (implied_key not in implied_dict):
+        if (not implied_key in implied_dict):
             implied_dict.update(implied)
     return conflict
 #print("test conflict")
@@ -306,13 +347,6 @@ def check_sat(clauses):
         print("Satisfiable")
     return
 
-def get_all_literals(clauses, decisions):
-    literals=[]
-    for each_clause in clauses:
-        for each_literal in each_clause:
-            if abs(each_literal) not in literals and abs(each_literal) not in decisions: 
-                literals.append(abs(each_literal))
-    return literals
 
 def check_unsat(clauses):
     for each_clause in clauses:
@@ -320,28 +354,56 @@ def check_unsat(clauses):
             return 1
     return 0
 
-def get_forced_decisions(curr_node,decision_graph):
+def get_forced_decisions(curr_node,decision_graph,free_var):
+    # if not [8,55,-95] in curr_node.clauses:
+    #     print(curr_node.var)
     while(1):
-        dummy_decisions = curr_node.decisions.copy()
+        #dummy_decisions = curr_node.decisions.copy()
+        implied_decisions = {}
+        implied_map = {}
         for clause in curr_node.clauses:
-            unresolved,new_decisions = implied_clause(clause,curr_node.decisions)
+            unresolved,new_decisions = implied_clause(clause,curr_node.decisions,implied_decisions)
             if -1 in new_decisions:
+                conflict_clause = implied_map.get(abs(unresolved[0])).copy()
+                conflict_clause2 = clause.copy()
+                conflict_clause2.remove(unresolved[0])
+                for literal in conflict_clause2:
+                    conflict_clause.append(literal)
+                print("Conflict type 1 detected!",implied_map.get(abs(unresolved[0])),conflict_clause)
                 return 1 #Conflict detected
+            if -2 in new_decisions:
+                #print("Conflict type 2 detected")
+                return 1
             if (len(new_decisions)==1):
-                curr_node.decisions.update(new_decisions)
+                #curr_node.decisions.update(new_decisions)
+                implied_decisions.update(new_decisions)
                 new_lit = [k for k,v in new_decisions.items()][0]
+                implied_map.update({new_lit:unresolved})
                 decision_graph.update({new_lit:[]})
                 for var in unresolved:
                     decision_graph[var].append(new_lit)
-        if curr_node.decisions==dummy_decisions:
+        if implied_decisions=={}:
             break
-    if (PRINT_DEBUG): print(decision_graph)
+        # for k in implied_decisions:
+        #     if k in free_var: free_var.remove(k)
+        #     if not k in curr_node.implied_var: curr_node.implied_var.append(k)
+        curr_node.decisions.update(implied_decisions)
+    # if len(curr_node.decisions)+len(free_var)!=99:
+    #     #print("Vars missing")
+    #     for k in free_var:
+    #         if k in curr_node.decisions:
+    #             print("")
+    #if (PRINT_DEBUG): print(decision_graph)
     remove_sat_clauses(curr_node.clauses, curr_node.decisions)
     return 0
 
-def dpll(cnf,num_vars):
+def dpll(cnf):
     all_clauses = cnf.clauses
     max_lit_num = cnf.nv
+    num_vars = cnf.nv
+    conflict_clauses=0
+    conflict_clause_limit=int(0.2*len(all_clauses))
+    conflict_clause_len_limit=4
     decision_graph = {}
     # Make assignment to clauses containing 1 literal in the original cnf
     forced_decision = unit_clause(all_clauses, decision_graph)
@@ -351,18 +413,41 @@ def dpll(cnf,num_vars):
         return 0
     # Creating dict containing no forced decision
     all_clauses = remove_sat_clauses(all_clauses, forced_decision)
+    if len(all_clauses)==0:
+        print("Satisfiable")
+        if (PRINT_DEBUG): print("Returning from point 1")
+        if (PRINT_SOLN): print(forced_decision)
+        return 1
     if check_unsat(all_clauses):
         print("Unsatisfiable")
         if (PRINT_DEBUG): print("Returning from point 2")
         return 0
     free_var = get_all_literals(all_clauses, forced_decision) #remove unit clause literals
+    if len(free_var)==0 and len(all_clauses)>0:
+        print("Unsatisfiable")
+        if (PRINT_DEBUG): print("Returning from point 2")
+        return 0
+    # if len(forced_decision)+len(free_var)!=5:
+    #     print("vars missing")
     var_index = 0
-    next_decision,var = count_literals(all_clauses,free_var,num_vars)
-    free_var.remove(var)
+    next_decision,var = count_literals(all_clauses,forced_decision,num_vars,None)
+    # #free_var.remove(var)
     root = Node(all_clauses,None,forced_decision,var)
     curr_node = root
+    get_forced_decisions(curr_node,decision_graph,free_var)
+    remove_sat_clauses(curr_node.clauses, curr_node.decisions)
+    # if len(curr_node.clauses)==0:
+    #     print("Satisfiable")
+    #     if (PRINT_DEBUG): print("Returning from point 1")
+    #     if (PRINT_SOLN): print(forced_decision)
+    #     return 1
     #Add variable selection and decision selection heuristic here
     while True:
+        # if (not ([-1,-2] in curr_node.clauses)):
+        #     print(var)
+        #if curr_node.var==95:
+            #print("var is 95")
+            # Node.printTree(root)
         if (curr_node.left!=None)and(curr_node.right!=None):
             if curr_node == root:
                 print("Unsatisfiable")
@@ -373,33 +458,43 @@ def dpll(cnf,num_vars):
                 next_decision = False
             else:
                 next_decision = True
-            free_var.append(curr_node.var)
-            curr_node=curr_node.parent
+            # free_var.extend(curr_node.implied_var)
+            # if not curr_node.var in free_var: free_var.append(curr_node.var)
+            #print("backtracking",curr_node.var)
+            curr_node=Node.removeNode(curr_node)
+            continue
+        # free_var = get_free_var(curr_node)
         if not next_decision:
             if curr_node.left==None:
                 #var_index+=1
-                if len(free_var)>0:
+                if len(get_all_literals(curr_node.clauses, curr_node.decisions))>0:
                     #var = free_var[var_index]
-                    next_decision,var=count_literals(curr_node.clauses,free_var,num_vars)
+                    if (curr_node.decisions.get(curr_node.var)==True):
+                        Node.createDummyNode(curr_node,False)
+                        continue
+                    next_decision,var=count_literals(curr_node.clauses,curr_node.decisions,num_vars,curr_node.var)
                     decision = False
                     decision_var = curr_node.var
                     decision_graph.update({decision_var:[]})
                     curr_node = Node.createNode(curr_node,decision,var)
-                    free_var.remove(var)
-                    # get_forced_decisions(curr_node,decision_graph)
-                    if (get_forced_decisions(curr_node,decision_graph)): #Checks for conflict 
+                    #free_var.remove(var)
+                    # get_forced_decisions(curr_node,decision_graph,free_var)
+                    if (get_forced_decisions(curr_node,decision_graph,free_var)): #Checks for conflict 
                         if curr_node.decisions.get(curr_node.parent.var):
                             next_decision = False
                         else:
                             next_decision = True
-                        free_var.append(curr_node.var)
-                        curr_node=curr_node.parent
+                        #free_var.extend(curr_node.implied_var)
+                        # if not curr_node.var in free_var: free_var.append(curr_node.var)
+                        #print("backtracking",curr_node.var)
+                        curr_node=Node.removeNode(curr_node)
                         #var_index-=1
                         continue
                     #curr_node.decisions.update(unit_clause(curr_node.clauses))
                     if len(curr_node.clauses) == 0:
                         print("Satisfiable")
                         if (PRINT_DEBUG): print("Returning from point 1")
+                        print(remove_sat_clauses(all_clauses, curr_node.decisions))
                         if (PRINT_SOLN): print(curr_node.decisions)
                         # Node.printTree(root)
                         return 1
@@ -430,28 +525,35 @@ def dpll(cnf,num_vars):
                         next_decision = False
                     else:
                         next_decision = True
-                    free_var.append(curr_node.var)
-                    curr_node=curr_node.parent
+                    # free_var.extend(curr_node.implied_var)
+                    # if not curr_node.var in free_var: free_var.append(curr_node.var)
+                    #print("backtracking",curr_node.var)
+                    curr_node=Node.removeNode(curr_node)
                     #var_index-=1
                     continue
             if curr_node.right==None:
                 #var_index+=1
-                if len(free_var)>0:
+                if len(get_all_literals(curr_node.clauses, curr_node.decisions))>0:
                     #var = free_var[var_index]
+                    if (curr_node.decisions.get(curr_node.var)==False):
+                        Node.createDummyNode(curr_node,True)
+                        continue
                     decision = True
-                    next_decision,var=count_literals(curr_node.clauses,free_var,num_vars)
+                    next_decision,var=count_literals(curr_node.clauses,curr_node.decisions,num_vars,curr_node.var)
                     decision_var = curr_node.var
                     decision_graph.update({decision_var:[]})
                     curr_node = Node.createNode(curr_node,decision,var)
-                    free_var.remove(var)
-                    #get_forced_decisions(curr_node,decision_graph)
-                    if (get_forced_decisions(curr_node,decision_graph)): #Checks for conflict 
+                    #free_var.remove(var)
+                    #get_forced_decisions(curr_node,decision_graph,free_var)
+                    if (get_forced_decisions(curr_node,decision_graph,free_var)): #Checks for conflict 
                         if curr_node.decisions.get(curr_node.parent.var):
                             next_decision = False
                         else:
                             next_decision = True
-                        free_var.append(curr_node.var)
-                        curr_node=curr_node.parent
+                        # free_var.extend(curr_node.implied_var)
+                        # if not curr_node.var in free_var: free_var.append(curr_node.var)
+                        #print("backtracking",curr_node.var)
+                        curr_node=Node.removeNode(curr_node)
                         #var_index-=1
                         continue
                     #curr_node.decisions.update(unit_clause(curr_node.clauses))
@@ -489,34 +591,42 @@ def dpll(cnf,num_vars):
                         next_decision = False
                     else:
                         next_decision = True
-                    free_var.append(curr_node.var)
-                    curr_node=curr_node.parent
+                    # free_var.extend(curr_node.implied_var)
+                    # if not curr_node.var in free_var: free_var.append(curr_node.var)
+                    #print("backtracking",curr_node.var)
+                    curr_node=Node.removeNode(curr_node)
                     continue
         else:
             if curr_node.right==None:
                 #var_index+=1
-                if len(free_var)>0:
+                if len(get_all_literals(curr_node.clauses, curr_node.decisions))>0:
                     #var = free_var[var_index]
+                    if (curr_node.decisions.get(curr_node.var)==False):
+                        Node.createDummyNode(curr_node,True)
+                        continue
                     decision = True
-                    next_decision,var=count_literals(curr_node.clauses,free_var,num_vars)
+                    next_decision,var=count_literals(curr_node.clauses,curr_node.decisions,num_vars,curr_node.var)
                     decision_var = curr_node.var
                     decision_graph.update({decision_var:[]})
                     curr_node = Node.createNode(curr_node,decision,var)
-                    free_var.remove(var)
-                    #get_forced_decisions(curr_node,decision_graph)
-                    if (get_forced_decisions(curr_node,decision_graph)): #Checks for conflict 
+                    #free_var.remove(var)
+                    #get_forced_decisions(curr_node,decision_graph,free_var)
+                    if (get_forced_decisions(curr_node,decision_graph,free_var)): #Checks for conflict 
                         if curr_node.decisions.get(curr_node.parent.var):
                             next_decision = False
                         else:
                             next_decision = True
-                        free_var.append(curr_node.var)
-                        curr_node=curr_node.parent
+                        # free_var.extend(curr_node.implied_var)
+                        # if not curr_node.var in free_var: free_var.append(curr_node.var)
+                        #print("backtracking",curr_node.var)
+                        curr_node=Node.removeNode(curr_node)
                         #var_index-=1
                         continue
                     #curr_node.decisions.update(unit_clause(curr_node.clauses))
                     if len(curr_node.clauses) == 0:
                         print("Satisfiable")
                         if (PRINT_DEBUG): print("Returning from point 7")
+                        print(remove_sat_clauses(all_clauses, curr_node.decisions))
                         if (PRINT_SOLN): print(curr_node.decisions)
                         # Node.printTree(root)
                         return 1
@@ -548,27 +658,34 @@ def dpll(cnf,num_vars):
                         next_decision = False
                     else:
                         next_decision = True
-                    free_var.append(curr_node.var)
-                    curr_node=curr_node.parent
+                    # free_var.extend(curr_node.implied_var)
+                    # if not curr_node.var in free_var: free_var.append(curr_node.var)
+                    #print("backtracking",curr_node.var)
+                    curr_node=Node.removeNode(curr_node)
                     continue
             if curr_node.left==None:
                 #var_index+=1
-                if len(free_var)>0:
+                if len(get_all_literals(curr_node.clauses, curr_node.decisions))>0:
                     #var = free_var[var_index]
-                    next_decision,var=count_literals(curr_node.clauses,free_var,num_vars)
+                    if (curr_node.decisions.get(curr_node.var)==True):
+                        Node.createDummyNode(curr_node,False)
+                        continue
+                    next_decision,var=count_literals(curr_node.clauses,curr_node.decisions,num_vars,curr_node.var)
                     decision = False
                     decision_var = curr_node.var
                     decision_graph.update({decision_var:[]})
                     curr_node = Node.createNode(curr_node,decision,var)
-                    free_var.remove(var)
-                    #get_forced_decisions(curr_node,decision_graph)
-                    if (get_forced_decisions(curr_node,decision_graph)): #Checks for conflict 
+                    #free_var.remove(var)
+                    #get_forced_decisions(curr_node,decision_graph,free_var)
+                    if (get_forced_decisions(curr_node,decision_graph,free_var)): #Checks for conflict 
                         if curr_node.decisions.get(curr_node.parent.var):
                             next_decision = False
                         else:
                             next_decision = True
-                        free_var.append(curr_node.var)
-                        curr_node=curr_node.parent
+                        # free_var.extend(curr_node.implied_var)
+                        # if not curr_node.var in free_var: free_var.append(curr_node.var)
+                        #print("backtracking",curr_node.var)
+                        curr_node=Node.removeNode(curr_node)
                         #var_index-=1
                         continue
                     #curr_node.decisions.update(unit_clause(curr_node.clauses))
@@ -605,8 +722,10 @@ def dpll(cnf,num_vars):
                         next_decision = False
                     else:
                         next_decision = True
-                    free_var.append(curr_node.var)
-                    curr_node=curr_node.parent
+                    # free_var.extend(curr_node.implied_var)
+                    # if not curr_node.var in free_var: free_var.append(curr_node.var)
+                    #print("backtracking",curr_node.var)
+                    curr_node=Node.removeNode(curr_node)
                     #var_index-=1
                     continue
             
@@ -617,9 +736,9 @@ def run_validator(num_cases):
     cnf = CNF()
     fail = 0
     for i in range(0,num_cases):
-        num_clauses = random.randint(10,VALIDATOR_MAX_CLAUSES)
-        num_vars = random.randint(10, VALIDATOR_MAX_VARS)
-        rand_seed = random.randint(0, 100)
+        num_clauses = random.randint(5,VALIDATOR_MAX_CLAUSES)
+        num_vars = random.randint(5, VALIDATOR_MAX_VARS)
+        rand_seed = random.randint(0, 500)
         print("Random testcase #%d:%d/%d/%d"%(i,rand_seed,num_clauses,num_vars))
         cnf = init_clauses(rand_seed, num_clauses, num_vars)
         if use_solver(cnf) != dpll(cnf,num_vars):
@@ -636,17 +755,36 @@ if __name__ == '__main__':
     if not VALIDATOR_MODE:
         if INPUT_TYPE == "random":
             cnf = CNF()
-            if PRINT_DEBUG: print("DPLL Config: \nRandom seed = %d\nNum clauses = %d\nNum variables = %d"% (RAND_SEED,NUM_CLAUSES,NUM_VARS))
+            print("DPLL Config: \nRandom seed = %d\nNum clauses = %d\nNum variables = %d"% (RAND_SEED,NUM_CLAUSES,NUM_VARS))
             cnf = init_clauses(RAND_SEED,NUM_CLAUSES,NUM_VARS)
         elif INPUT_TYPE == "file":
             cnf = read_cnf_formula(INPUT_FILE)
-            if PRINT_DEBUG: print("DPLL Config: \nRandom seed = %d\nNum clauses = %d\nNum variables = %d"% (RAND_SEED,NUM_CLAUSES,NUM_VARS))
-            cnf = init_clauses(RAND_SEED,NUM_CLAUSES,NUM_VARS)
+            print("DPLL Config: \nInput file = %s\nNum clauses = %d\nNum variables = %d"% (INPUT_FILE,len(cnf.clauses),cnf.nv))
+            #cnf = init_clauses(RAND_SEED,NUM_CLAUSES,NUM_VARS)
+        elif INPUT_TYPE == "PHP":
+            cnf = PHP(TESTCASE)
+            print("DPLL Config: \nInput file = %s\nNum clauses = %d\nNum variables = %d"% (INPUT_TYPE,len(cnf.clauses),cnf.nv))
+        elif INPUT_TYPE == "GT":
+            cnf = GT(TESTCASE)
+            print("DPLL Config: \nInput file = %s\nNum clauses = %d\nNum variables = %d"% (INPUT_TYPE,len(cnf.clauses),cnf.nv))
+        elif INPUT_TYPE == "CB":
+            cnf = CB(TESTCASE)
+            print("DPLL Config: \nInput file = %s\nNum clauses = %d\nNum variables = %d"% (INPUT_TYPE,len(cnf.clauses),cnf.nv))
+        elif INPUT_TYPE == "PAR":
+            cnf = PAR(TESTCASE)
+            print("DPLL Config: \nInput file = %s\nNum clauses = %d\nNum variables = %d"% (INPUT_TYPE,len(cnf.clauses),cnf.nv))
         print("PYSAT Solver: ",end='')
+        # cnf = CNF()
+        # cnf.append([1,2,3])
+        # cnf.append([1,-3])
+        # cnf.append([2,4])
+        # cnf.append([3,4,5])
+        # cnf.append([-1,5])
         use_solver(cnf)
+        #print(cnf.clauses)
         if TIMED_MODE: start = time.perf_counter()
         print("Our DPLL Solver: ",end='')
-        dpll(cnf,NUM_VARS)
+        dpll(cnf)
         if TIMED_MODE: 
             end = time.perf_counter()
             print("Our DPLL took %.3f ms time" % ((end-start)*1000))
